@@ -1,178 +1,105 @@
-# ASP.NET Core Docker Sample
+# ASP.NET CI/CD with Azure DevOps & Docker Desktop Kubernetes
 
-This sample demonstrates how to build container images for ASP.NET Core web apps. See [.NET Docker Samples](../README.md) for more samples.
+## 🎯 Proje Amacı
+Bu projenin amacı, **ASP.NET Core** tabanlı bir web uygulamasının Azure DevOps Repo üzerinde yönetilmesi, VS Code üzerinden yapılan `commit` & `push` işlemi sonrası Azure DevOps Pipeline’ın otomatik olarak tetiklenmesi ve uygulamanın Docker Desktop üzerinde çalışan Kubernetes ortamına otomatik olarak deploy edilmesidir.
 
-## Run the sample image
+Bu çalışma, manuel müdahale olmadan uçtan uca çalışan bir **CI/CD** sürecini göstermektedir.
 
-You can start by launching a sample from our [container registry](https://mcr.microsoft.com/) and accessing it in your web browser at `http://localhost:8000`.
+## 🛠️ Kullanılan Teknolojiler
+* **ASP.NET Core**
+* **Azure DevOps** (Repo & Pipelines)
+* **Azure DevOps Self-Hosted Agent** (Local PC)
+* **Docker Desktop**
+* **Kubernetes** (Docker Desktop Kubernetes)
+* **kubectl**
+* **Visual Studio Code**
 
-```console
-docker run --rm -it -p 8000:8080 -e ASPNETCORE_HTTP_PORTS=8080 mcr.microsoft.com/dotnet/samples:aspnetapp
-```
+## 🔄 Mimari Akış
+1. Proje kaynak kodu Azure DevOps Repo’da tutulur.
+2. Geliştirici VS Code üzerinden kod değişikliği yapar.
+3. Değişiklik `commit` edilip repoya `push` edilir.
+4. `master` branch’ine yapılan push işlemi pipeline’ı otomatik olarak tetikler.
+5. Pipeline, geliştiricinin kendi bilgisayarında çalışan self-hosted agent üzerinde çalışır.
+6. Docker image, Docker Desktop Linux engine (`desktop-linux`) context’inde build edilir.
+7. Kubernetes manifest dosyaları uygulanır.
+8. Deployment yeni image ile güncellenir ve rollout tamamlanır.
+9. Uygulama Kubernetes üzerinde ayağa kalkar ve web üzerinden erişilebilir hale gelir.
 
-You should see the following console output as the application starts:
+---
 
-```console
-> docker run --rm -it -p 8000:8080 -e ASPNETCORE_HTTP_PORTS=8080 aspnetapp
-info: Microsoft.Hosting.Lifetime[14]
-      Now listening on: http://[::]:8080
-info: Microsoft.Hosting.Lifetime[0]
-      Application started. Press Ctrl+C to shut down.
-```
+## CI/CD Pipeline Açıklaması (`azure-pipelines.yml`)
 
-After the application starts, navigate to `http://localhost:8000` in your web browser.
-You can also reach the app's API endpoint from the command line:
+### Pipeline Tetiklenmesi
 
-```bash
-$ curl http://localhost:8000/Environment
-{
-  "runtimeVersion": ".NET 10.0.0-rc.1.25451.107",
-  "osVersion": "Ubuntu 24.04.3 LTS",
-  "osArchitecture": "X64",
-  "user": "app",
-  "processorCount": 32,
-  "totalAvailableMemoryBytes": 67396280320,
-  "memoryLimit": 0,
-  "memoryUsage": 62160896,
-  "hostName": "d021ffa2e15f"
-}
-```
+Pipeline, `master` branch’ine yapılan her push işleminde otomatik olarak çalışır.
 
-You can see the app running via `docker ps`:
 
-```bash
-$ docker ps
-CONTAINER ID   IMAGE                                        COMMAND         CREATED          STATUS                    PORTS                  NAMES
-CONTAINER ID   IMAGE       COMMAND         CREATED         STATUS         PORTS                                         NAMES
-d021ffa2e15f   aspnetapp   "./aspnetapp"   2 minutes ago   Up 2 minutes   0.0.0.0:8000->8080/tcp, [::]:8000->8080/tcp   reverent_aryabhata
-```
+### Agent Yapılandırması
 
-## Change port
+Pipeline, sanal makine yerine doğrudan geliştiricinin kendi bilgisayarında çalışan self-hosted agent (`local-docker-agent`) üzerinden çalışmaktadır.
 
-ASP.NET Core apps (in official .NET images) listen to [port 8080 by default](https://github.com/dotnet/dotnet-docker/blob/6da64f31944bb16ecde5495b6a53fc170fbe100d/src/runtime-deps/8.0/bookworm-slim/amd64/Dockerfile#L7). The [`-p` argument](https://docs.docker.com/engine/reference/commandline/run/#publish) in these examples maps host port `8000` to container port `8080` (`host:container` mapping). The web server hosted by the container will not be accessible without this mapping.
 
-ASP.NET Core can be [configured to listen on a different or additional port](https://learn.microsoft.com/aspnet/core/fundamentals/servers/kestrel/endpoints).
-For example, setting either of the following evnironment variables will change the container port to `80`:
+### Adım 1 – Docker ve Kubernetes Doğrulama
 
-- `ASPNETCORE_HTTP_PORTS=80`
-- `ASPNETCORE_URLS=http://+:80`
+Pipeline ilk olarak agent üzerinde Docker ve Kubernetes erişimini doğrular.
 
-> [!NOTE]
-> Ports 1 through 1023 are restricted to root users only, and will not work when running as the non-root root user provided in .NET images.
 
-`ASPNETCORE_URLS` overrides `ASPNETCORE_HTTP_PORTS` if set.
-The `ASPNETCORE_HTTP_PORTS` envrionment variable is used in the [ASP.NET Core](https://github.com/dotnet/dotnet-docker/blob/d033b1beda6bc9ac933dd88fcc572ec05c28f705/src/runtime-deps/10.0/noble/amd64/Dockerfile#L7)
-images to set the default port.
+### Adım 2 – Docker Image Build
 
-## Enable HTTPS
+Docker image, Docker Desktop Kubernetes ortamının Linux tabanlı olması sebebiyle `desktop-linux` context’inde build edilir.
 
-To host the sample image with HTTPS, follow the instructions for [Running pre-built Container Images with HTTPS](../host-aspnetcore-https.md#hosting-aspnet-core-images-with-docker-over-https).
-For a more in-depth guide to developing ASP.NET Core apps with HTTPS, check out [Developing ASP.NET Core Applications with Docker over HTTPS](../run-aspnetcore-https-development.md).
 
-## Build the sample image
+### Adım 3 – Kubernetes Deploy
 
-You can build the sample image using the following command (cloninig the repo isn't necessary):
+Pipeline, Kubernetes manifestlerini uygular ve deployment’ı yeniden başlatarak yeni image’ın aktif olmasını sağlar.
 
-```console
-docker build --pull -t aspnetapp 'https://github.com/dotnet/dotnet-docker.git#:samples/aspnetapp'
-```
 
-If you have cloned the repo, you can build the image using your local copy:
+## Kubernetes Kaynakları
 
-```console
-cd samples/aspnetapp
-docker build --pull -t aspnetapp .
-```
+### Deployment (`deployment.yaml`)
 
-Add the argument `-f <Dockerfile>` to build the sample in a different configuration.
-For example, build an [Ubuntu Chiseled](https://devblogs.microsoft.com/dotnet/dotnet-6-is-now-in-ubuntu-2204/#net-in-chiseled-ubuntu-containers) image using [Dockerfile.chiseled](Dockerfile.chiseled):
+- Deployment Adı: `aspnet-app`  
+- Replica Sayısı: `1`  
+- Container Image: `aspnet-app:latest`  
+- Container Port: `8081`  
 
-```console
-docker build --pull -t dotnetapp -f Dockerfile.chiseled 'https://github.com/dotnet/dotnet-docker.git#:samples/dotnetapp'
-```
 
-You can run your local image the same way as described in [Run the sample image](#run-the-sample-image):
+### Service (`service.yaml`)
 
-```console
-docker run --rm -it -p 8000:8080 -e ASPNETCORE_HTTP_PORTS=8080 aspnetapp
-```
+- Service Adı: `aspnet-service`  
+- Service Tipi: `NodePort`  
+- Service Port: `8081`  
+- NodePort: `30081`  
 
-### Multi-platform build
+---
 
-.NET sample Dockerfiles support multi-platform builds via cross-compilation.
-First, check out the Docker [multi-platform build prerequisites](https://docs.docker.com/build/building/multi-platform/#prerequisites)
+## Uygulamaya Erişim
 
-Once you have the prerequisites set up, you can build the ASP.NET app sample for a specific architecture:
+Kubernetes deploy işlemi tamamlandıktan sonra uygulamaya aşağıdaki adres üzerinden erişilir:
 
-```console
-# From an amd64 machine:
-docker buildx build --platform linux/arm64 -t aspnetapp .
+http://localhost:30081
 
-# From an arm64 machine:
-docker buildx build --platform linux/amd64 -t aspnetapp .
-```
+---
 
-You can also build both platforms at once:
+## Doğrulama
 
-```console
-docker buildx build --platform linux/amd64,linux/arm64 -t aspnetapp .
-```
+Deploy işleminin başarılı olduğu aşağıdaki komutlarla doğrulanabilir:
 
-This works thanks to .NET's support for cross-compilation.
-The build runs on your build machine's architecture and outputs IL for the target architecture.
-The app is then copied to the final stage without running any commands on the target image - there's no emulation involved.
+kubectl get pods -o wide
+kubectl get svc -o wide
+kubectl get endpoints aspnet-service -o wide
 
-> [!NOTE]
-> .NET does not support running under QEMU emulation. See [.NET and QEMU](../build-for-a-platform.md#net-and-qemu) for more information.
+Pod durumunun Running olması ve endpoint bilgisinin dolu olması, uygulamanın Kubernetes üzerinde başarıyla çalıştığını gösterir.
 
-## Build image with the SDK
+---
 
-The easiest way to [build .NET images is using the SDK](https://learn.microsoft.com/dotnet/core/containers/overview).
 
-```console
-cd samples/aspnetapp
-dotnet publish -p PublishProfile=DefaultContainer
-```
-
-You can control many aspects of the generated container through MSBuild properties.
-For example, the following command uses a different base image and publishes the final image to DockerHub:
-
-```console
-dotnet publish \
-    -p PublishProfile=DefaultContainer \
-    -p ContainerBaseImage=mcr.microsoft.com/dotnet/aspnet:10.0-noble-chiseled \
-    -p ContainerRegistry=docker.io \
-    -p ContainerRepository=youraccount/aspnetapp
-```
-
-These properties can also be [specified in your project file](https://learn.microsoft.com/visualstudio/msbuild/property-element-msbuild).
-For a full list of supported properties, see the [.NET SDK publishing reference](https://learn.microsoft.com/dotnet/core/containers/publish-configuration).
-
-## Supported Linux distros
-
-The .NET Team publishes images for [multiple distros](../../documentation/supported-platforms.md).
-
-Sample Dockerfiles are provided for:
-
-- [Alpine](Dockerfile.alpine)
-- [Alpine with Composite ready-to-run image](Dockerfile.alpine-composite)
-- [Alpine with ICU installed](Dockerfile.alpine-icu)
-- [Azure Linux](Dockerfile.azurelinux)
-- [Azure Linux Distroless](Dockerfile.azurelinux-distroless)
-- [Ubuntu](Dockerfile.ubuntu)
-- [Ubuntu Chiseled](Dockerfile.chiseled)
-- [Ubuntu Chiseled with Composite ready-to-run image](Dockerfile.chiseled-composite)
-
-## Supported Windows versions
-
-The .NET Team publishes images for [multiple Windows versions](../../documentation/supported-platforms.md). You must have [Windows containers enabled](https://docs.docker.com/docker-for-windows/#switch-between-windows-and-linux-containers) to use these images.
-
-Samples are provided for
-
-- [Nano Server](Dockerfile.nanoserver)
-- [Windows Server Core](Dockerfile.windowsservercore)
-- [Windows Server Core with IIS](Dockerfile.windowsservercore-iis) (Note: the IIS sample listens on port `80`, not `8080`)
-
-You can pull a pre-built Windows sample image using the following tag:
-
-- `mcr.microsoft.com/dotnet/samples:aspnetapp-nanoserver-ltsc2022`
+## 📁 Repository Yapısı
+```text
+├── azure-pipelines.yml
+├── deployment.yaml
+├── service.yaml
+├── Dockerfile
+├── aspnetapp/
+│   └── ASP.NET uygulama dosyaları
+└── README.md
