@@ -1,0 +1,30 @@
+trigger:
+- master
+
+pool:
+  name: 'local-docker-agent'
+
+variables:
+  imageName: 'aspnet-app'
+  imageTag: '$(Build.BuildId)'
+
+steps:
+- task: CmdLine@2
+  displayName: 'Verify Docker & kubectl'
+  inputs:
+    script: |
+      powershell -NoProfile -ExecutionPolicy Bypass -Command "docker version; docker context ls; kubectl version --client; kubectl get nodes"
+
+# Image'ı Docker Desktop'ın Linux engine'inde (desktop-linux) build et ve benzersiz tag ver
+- task: CmdLine@2
+  displayName: 'Build image in desktop-linux context'
+  inputs:
+    script: |
+      powershell -NoProfile -ExecutionPolicy Bypass -Command "docker context use desktop-linux; docker build -t $(imageName):$(imageTag) .; docker images | Select-String $(imageName)"
+
+# Kubernetes'e uygula + image'ı yeni tag'e güncelle + rollout bekle
+- task: CmdLine@2
+  displayName: 'Deploy to Docker Desktop Kubernetes'
+  inputs:
+    script: |
+      powershell -NoProfile -ExecutionPolicy Bypass -Command "kubectl apply -f deployment.yaml; kubectl apply -f service.yaml; kubectl set image deployment/aspnet-app aspnet-app=$(imageName):$(imageTag); kubectl rollout status deployment/aspnet-app --timeout=180s; kubectl get pods -o wide; kubectl get endpoints aspnet-service -o wide; kubectl get svc -o wide"
